@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="" xml:lang="">
+  <head>
+    <title>Bootstrapping Multilevel Models in R Using lmeresampler</title>
+    <meta charset="utf-8" />
+    <meta name="author" content="Adam Loy, Carleton College" />
+    <script src="libs/header-attrs-2.9/header-attrs.js"></script>
+    <link href="libs/remark-css-0.0.1/useR-fonts.css" rel="stylesheet" />
+    <link rel="stylesheet" href="jsm.css" type="text/css" />
+  </head>
+  <body>
+    <textarea id="source">
+class: center, middle, inverse, title-slide
+
+# Bootstrapping Multilevel Models in R Using <code>lmeresampler</code>
+### Adam Loy, Carleton College
+### <a href="https://aloy.rbind.io/slides/jsm2021">aloy.rbind.io/slides/jsm2021</a>
+
+---
+
+
+
+
+## `lmeresampler`
+
+Makes a wider set of bootstrap algorithms available to `nlme` and `lme4` users
+
+  + parametric*
+  
+  + residual (semi-parametric)*
+  
+  + cases (non-parametric)*
+  
+  + random-effects block
+  
+  + wild
+
+&lt;br&gt;
+
+&lt;br&gt;
+
+
+.footnote[
+`*` = Also works with model fit via `lme4::glmer()`
+]
+
+---
+
+## Example data
+
+
+
+```r
+library(lmeresampler)
+jsp728 %&gt;% print(width = 70)
+```
+
+```
+## # A tibble: 728 x 9
+##    mathAge11 mathAge8 gender class     school normAge11 normAge8
+##        &lt;dbl&gt;    &lt;dbl&gt; &lt;fct&gt;  &lt;fct&gt;     &lt;fct&gt;      &lt;dbl&gt;    &lt;dbl&gt;
+##  1        39       36 M      nonmanual 1         1.80     1.55  
+##  2        11       19 F      manual    1        -2.29    -0.980 
+##  3        32       31 F      manual    1        -0.0413   0.638 
+##  4        27       23 F      nonmanual 1        -0.750   -0.460 
+##  5        36       39 F      nonmanual 1         0.743    2.15  
+##  6        33       25 M      manual    1         0.163   -0.182 
+##  7        30       27 M      manual    1        -0.372    0.0724
+##  8        17       14 M      manual    1        -1.63    -1.52  
+##  9        33       30 M      manual    1         0.163    0.454 
+## 10        20       19 M      manual    1        -1.40    -0.980 
+## # … with 718 more rows, and 2 more variables: schoolMathAge8 &lt;dbl&gt;,
+## #   mathAge8c &lt;dbl&gt;
+```
+
+???
+
+As a first example, let's consider the junior school project data set provided by lmeresampler, which is discussed in Goldstein's textbook on multilevel modeling. The data set is comprised of measurements taken on 728 elementary school students across 48 schools in London.
+
+
+---
+
+## Fitting a random intercept model
+
+
+```r
+library(lme4)
+jsp_mod &lt;- lmer(
+  mathAge11 ~ mathAge8 + gender + class + (1 | school), 
+  data = jsp728
+)
+```
+
+
+???
+
+Suppose we wish to fit a random intercept model explored by Goldstein where the math score at age 8, gender, and the father's social class were used to describe math scores at age 11. Here, we fit this model using `lmer()` and store the results in the jsp_mod object.
+
+---
+
+## `bootstrap()`
+
+`lmeresampler` provides a unified `bootstrap()` function
+
+Running a residual bootstrap on our model:
+
+
+```r
+resid_boot &lt;- bootstrap(
+  jsp_mod,            # lme4/nlme output 
+  .f = fixef,         # user-specified function
+  type = "residual",  # bootstrap algorithm
+  B = 10000           # No. resamples
+)
+```
+
+---
+
+## `bootstrap()`
+
+`lmeresampler` provides a unified `bootstrap()` function
+
+Running a residual bootstrap on our model:
+
+
+
+
+
+
+```r
+resid_boot &lt;- bootstrap(
+* jsp_mod,            # lme4/nlme output 
+  .f = fixef,         # user-specified function
+  type = "residual",  # bootstrap algorithm
+  B = 10000           # No. resamples
+)
+```
+
+---
+
+## `bootstrap()`
+
+`lmeresampler` provides a unified `bootstrap()` function
+
+Running a residual bootstrap on our model:
+
+
+
+
+```r
+resid_boot &lt;- bootstrap(
+  jsp_mod,            # lme4/nlme output 
+* .f = fixef,         # user-specified function
+  type = "residual",  # bootstrap algorithm
+  B = 10000           # No. resamples
+)
+```
+
+---
+
+## `bootstrap()`
+
+`lmeresampler` provides a unified `bootstrap()` function
+
+Running a residual bootstrap on our model:
+
+
+
+```r
+resid_boot &lt;- bootstrap(
+  jsp_mod,            # lme4/nlme output 
+  .f = fixef,         # user-specified function
+* type = "residual",  # bootstrap algorithm
+  B = 10000           # No. resamples
+)
+```
+
+---
+
+## `bootstrap()`
+
+`lmeresampler` provides a unified `bootstrap()` function
+
+Running a residual bootstrap on our model:
+
+
+
+```r
+resid_boot &lt;- bootstrap(
+  jsp_mod,            # lme4/nlme output 
+  .f = fixef,         # user-specified function
+  type = "residual",  # bootstrap algorithm
+* B = 10000           # No. resamples
+)
+```
+
+???
+
+The `bootstrap()` command provides a unified interface to all of the bootstrap procedures. For example, we can easily run a residual bootstrap for our fitted model using the bootstrap command, specifying the function that calculates the quantities of interest, the type of bootstrap, and the number of bootstrap replicates. Here, we're interested in extracting the fixed effects via fixef() and we ran 10000 bootstrap replicates.
+
+---
+
+### `summary()`
+
+
+```r
+summary(resid_boot)
+```
+
+```
+## Bootstrap type: parametric 
+## 
+## Number of resamples: 10000 
+## 
+##             term   observed   rep.mean         se          bias
+## 1    (Intercept) 14.1577509 14.1655204 0.73693296  0.0077694599
+## 2       mathAge8  0.6388895  0.6385399 0.02561213 -0.0003495661
+## 3        genderM -0.3571922 -0.3564212 0.33586408  0.0007710188
+## 4 classnonmanual  0.7200815  0.7201838 0.39063554  0.0001023552
+## 
+## There were 0 messages, 0 warnings, and 0 errors.
+```
+
+???
+
+bootstrap returns an object of class lmeresamp, and we've provided familiar methods to explore the results. For example, the summary function allows us to quickly explore the mean, standard error, and bias of our results. It also informs us of any warnings encountered along the way, such as convergence issues. 
+
+---
+
+### `confint()`
+
+
+```r
+confint(resid_boot, type = "basic")
+```
+
+```
+## # A tibble: 4 x 6
+##   term           estimate   lower  upper type  level
+##   &lt;chr&gt;             &lt;dbl&gt;   &lt;dbl&gt;  &lt;dbl&gt; &lt;chr&gt; &lt;dbl&gt;
+## 1 (Intercept)      14.2   12.7    15.6   basic  0.95
+## 2 mathAge8          0.639  0.589   0.689 basic  0.95
+## 3 genderM          -0.357 -1.03    0.293 basic  0.95
+## 4 classnonmanual    0.720 -0.0520  1.50  basic  0.95
+```
+
+???
+The confint function provides normal, basic, and percentile bootstrap confidences intervals for all of the parameters by default. In this code chunk, we calculate only basic bootstrap intervals by setting type to "basic".
+
+---
+
+### `plot()`
+
+
+```r
+plot(resid_boot, var = "mathAge8")
+plot(resid_boot, var = 1)
+```
+
+![](jsm2021-lightning_files/figure-html/unnamed-chunk-11-1.svg)![](jsm2021-lightning_files/figure-html/unnamed-chunk-11-2.svg)
+
+---
+
+### Get the package
+
+Stable version on CRAN
+
+```r
+install.packages("lmeresampler")
+```
+
+Development version on GitHub
+
+```r
+remotes::install_github("aloy/lmeresampler")
+```
+
+
+--
+
+### Learn more
+
+Check out my 15-minute talk!
+
+Documentation and examples: https://aloy.github.io/lmeresampler/
+
+Read the preprint: https://arxiv.org/a/loy_a_1.html
+
+
+    </textarea>
+<style data-target="print-only">@media screen {.remark-slide-container{display:block;}.remark-slide-scaler{box-shadow:none;}}</style>
+<script src="https://remarkjs.com/downloads/remark-latest.min.js"></script>
+<script>var slideshow = remark.create({
+"highlightStyle": "github",
+"highlightLines": true
+});
+if (window.HTMLWidgets) slideshow.on('afterShowSlide', function (slide) {
+  window.dispatchEvent(new Event('resize'));
+});
+(function(d) {
+  var s = d.createElement("style"), r = d.querySelector(".remark-slide-scaler");
+  if (!r) return;
+  s.type = "text/css"; s.innerHTML = "@page {size: " + r.style.width + " " + r.style.height +"; }";
+  d.head.appendChild(s);
+})(document);
+
+(function(d) {
+  var el = d.getElementsByClassName("remark-slides-area");
+  if (!el) return;
+  var slide, slides = slideshow.getSlides(), els = el[0].children;
+  for (var i = 1; i < slides.length; i++) {
+    slide = slides[i];
+    if (slide.properties.continued === "true" || slide.properties.count === "false") {
+      els[i - 1].className += ' has-continuation';
+    }
+  }
+  var s = d.createElement("style");
+  s.type = "text/css"; s.innerHTML = "@media print { .has-continuation { display: none; } }";
+  d.head.appendChild(s);
+})(document);
+// delete the temporary CSS (for displaying all slides initially) when the user
+// starts to view slides
+(function() {
+  var deleted = false;
+  slideshow.on('beforeShowSlide', function(slide) {
+    if (deleted) return;
+    var sheets = document.styleSheets, node;
+    for (var i = 0; i < sheets.length; i++) {
+      node = sheets[i].ownerNode;
+      if (node.dataset["target"] !== "print-only") continue;
+      node.parentNode.removeChild(node);
+    }
+    deleted = true;
+  });
+})();
+(function() {
+  "use strict"
+  // Replace <script> tags in slides area to make them executable
+  var scripts = document.querySelectorAll(
+    '.remark-slides-area .remark-slide-container script'
+  );
+  if (!scripts.length) return;
+  for (var i = 0; i < scripts.length; i++) {
+    var s = document.createElement('script');
+    var code = document.createTextNode(scripts[i].textContent);
+    s.appendChild(code);
+    var scriptAttrs = scripts[i].attributes;
+    for (var j = 0; j < scriptAttrs.length; j++) {
+      s.setAttribute(scriptAttrs[j].name, scriptAttrs[j].value);
+    }
+    scripts[i].parentElement.replaceChild(s, scripts[i]);
+  }
+})();
+(function() {
+  var links = document.getElementsByTagName('a');
+  for (var i = 0; i < links.length; i++) {
+    if (/^(https?:)?\/\//.test(links[i].getAttribute('href'))) {
+      links[i].target = '_blank';
+    }
+  }
+})();
+// adds .remark-code-has-line-highlighted class to <pre> parent elements
+// of code chunks containing highlighted lines with class .remark-code-line-highlighted
+(function(d) {
+  const hlines = d.querySelectorAll('.remark-code-line-highlighted');
+  const preParents = [];
+  const findPreParent = function(line, p = 0) {
+    if (p > 1) return null; // traverse up no further than grandparent
+    const el = line.parentElement;
+    return el.tagName === "PRE" ? el : findPreParent(el, ++p);
+  };
+
+  for (let line of hlines) {
+    let pre = findPreParent(line);
+    if (pre && !preParents.includes(pre)) preParents.push(pre);
+  }
+  preParents.forEach(p => p.classList.add("remark-code-has-line-highlighted"));
+})(document);</script>
+
+<script>
+slideshow._releaseMath = function(el) {
+  var i, text, code, codes = el.getElementsByTagName('code');
+  for (i = 0; i < codes.length;) {
+    code = codes[i];
+    if (code.parentNode.tagName !== 'PRE' && code.childElementCount === 0) {
+      text = code.textContent;
+      if (/^\\\((.|\s)+\\\)$/.test(text) || /^\\\[(.|\s)+\\\]$/.test(text) ||
+          /^\$\$(.|\s)+\$\$$/.test(text) ||
+          /^\\begin\{([^}]+)\}(.|\s)+\\end\{[^}]+\}$/.test(text)) {
+        code.outerHTML = code.innerHTML;  // remove <code></code>
+        continue;
+      }
+    }
+    i++;
+  }
+};
+slideshow._releaseMath(document);
+</script>
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+(function () {
+  var script = document.createElement('script');
+  script.type = 'text/javascript';
+  script.src  = 'https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-MML-AM_CHTML';
+  if (location.protocol !== 'file:' && /^https?:/.test(script.src))
+    script.src  = script.src.replace(/^https?:/, '');
+  document.getElementsByTagName('head')[0].appendChild(script);
+})();
+</script>
+  </body>
+</html>

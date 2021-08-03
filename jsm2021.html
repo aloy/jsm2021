@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="" xml:lang="">
+  <head>
+    <title>Bootstrapping Multilevel Models in R Using lmeresampler</title>
+    <meta charset="utf-8" />
+    <meta name="author" content="Adam Loy, Carleton College" />
+    <script src="libs/header-attrs-2.9/header-attrs.js"></script>
+    <link href="libs/remark-css-0.0.1/useR-fonts.css" rel="stylesheet" />
+    <link rel="stylesheet" href="jsm.css" type="text/css" />
+  </head>
+  <body>
+    <textarea id="source">
+class: center, middle, inverse, title-slide
+
+# Bootstrapping Multilevel Models in R Using <code>lmeresampler</code>
+### Adam Loy, Carleton College
+### <a href="https://aloy.rbind.io/slides/jsm2021">aloy.rbind.io/slides/jsm2021</a>
+
+---
+
+
+
+
+
+## Example
+
+*  Osteoporosis study analyzed by Galwey (2014) and again by Field, Pang, and Welsh (2010) 
+
+* 2981 subjects recruited from 8 centers
+
+* Bone mineral density (BMD) measured on each subject by an X-ray
+scan of the lumbar region 
+
+* Goal is to explore the relationship between BMD and the
+sex, age, height, and weight of subjects
+
+* 117 subjects have missing values
+
+???
+
+Before jumping into the bootstrap, let's consider an example where the bootstrap may be useful. 
+This example comes from a textbook osteoporosis study analyzed by Galwey. 
+
+There are 2981 subjects in the study who were recruited across 8 centers, so subjects
+are nested within centers.
+
+For each subject, Bone mineral density was measured by an X-ray scan of the lumbar region. 
+
+The purpose of Galwey's analysis was to explore the relationship 
+between Bone mineral density and the sex, age, height, and weight of the subjects.
+
+117 cases had missing values on at least one of the predictors, so those cases were dropped for
+simplicity.
+
+---
+
+## Initial mixed-effects model
+
+
+Galwey (2014) propose this initial model
+
+
+```r
+fm &lt;- lmer(BMD ~ Sex + Age + I(Age^2) + Height*Weight + 
+             I(Height^2) + I(Weight^2) + (1|CentreNumber), 
+           data = osteo)
+```
+
+* Fixed effects Sex, Age, Age&lt;sup&gt;2&lt;/sup&gt;, Height, Height&lt;sup&gt;2&lt;/sup&gt;, and Height `\(\times\)` Weight
+
+* Random intercept for CentreNumber
+
+???
+
+The initial model considered by Galwey included sex, linear and quadratic terms for age, height, and weight,
+as well as the interaction between height and weight as predictors, and included a random intercept for the center number.
+
+This model is easily fit via lmer in the lme4 R package.
+
+---
+
+## Conditional residuals
+
+&lt;img src="jsm2021_files/figure-html/galwey diagnostics-1.svg" title="Three residual plots. The left plot displays a histogram of the conditional residuals and is right skewed with some high outliers. The middle plot is a scatterplot of the conditional residuals plotted against the conditional fitted values. The largest conditional residuals do not stand out in terms of the fitted values. The rightmost plot is a normal Q-Q plot of the conditional residuals. The right skew and outliers are again evident." alt="Three residual plots. The left plot displays a histogram of the conditional residuals and is right skewed with some high outliers. The middle plot is a scatterplot of the conditional residuals plotted against the conditional fitted values. The largest conditional residuals do not stand out in terms of the fitted values. The rightmost plot is a normal Q-Q plot of the conditional residuals. The right skew and outliers are again evident." width="100%" /&gt;
+
+* Analysis of the conditional residuals reveal violation of condition that `\(\varepsilon \sim \mathcal{N}(\mathbf{0}, \sigma^2 \mathbf{I})\)`
+
+* Galwey (2014) deletes 63 outliers identified from more extensive scans
+
+???
+
+After fitting the initial model, Galwey conducted a brief residual analysis, noting the 
+apparent non-linearity of the conditional residuals or error terms.
+
+To address this issue, Galwey deletes 63 outliers that were identified by more extensive scanning methods; 
+however there is another option. While the model seems suspect either due to a distributional violation or
+contamination with outliers, more robust analysis is still possible using methods such as the bootstrap.
+
+Throughout this talk I'll guide you through how to implement bootstrap procedures for linear mixed-effects 
+models in R, and also point to some additional applications.
+
+---
+
+## Bootstrapping LME models in R
+
+
+
+
+- 2008 van der Leeden, Meijer, and Busing point out that R users must implement their own bootstrap procedures
+
+- 2009 useR! talk by Sánchez-Espigares &amp; Ocaña outlined a framework
+    + parametric
+    + semiparametric
+    + Wild
+    + semiparametric by block
+
+- 2013 `lme4::bootMer()` implemented parametric bootstrap, semiparametric added later
+
+???
+
+In 2008, Van der Leeden and coauthors pointed out that many bootstrap procedures were unavailable in R, so users needed to program their own bootstraps if they wanted something other than the parametric bootstrap. 
+
+In 2009, an R package was presented at useR! outlining a comprehensive framework for bootstrapping multilevel models; unfortunately, the package never made it's way to CRAN and the project appears to have been abandoned. 
+
+Since that time, there have been a few additions to `lme4` in terms of bootstrapping capabilities, but numerous procedures are still missing. lmeresampler implements many of the missing procedures and is under active maintenance and development.
+
+---
+
+## lmeresampler
+
+Implements a wider set of bootstrap algorithms available to `nlme` and `lme4` users
+
+- parametric*
+
+- residual (semi-parametric)*
+
+- cases (non-parametric)*
+
+- random-effects block
+
+- wild
+
+&lt;br&gt;
+
+&lt;br&gt;
+
+&lt;br&gt;
+
+`*` = Also works with model fit via `lme4::glmer()`
+
+
+???
+
+lmeresampler provides users with easy access to a larger set of bootstrap procedures. 
+Currently, it implements five procedures for Gaussian response models, including the parametric, 
+residual, cases, random-effects block, and wild bootstraps. 
+
+The parametric, residual, and cases bootstraps are also available for generalized linear mixed-effects 
+models fit via `glmer`.
+  
+
+---
+
+## Residual bootstrap
+
+Carpenter, Goldstein, and Rasbash (2003) proposed a residual bootstrap for multilevel models
+
+1. Fit the model via `lme4::lmer()` or `nlme::lme()`
+
+2. Extract the error terms and random effects.
+
+3. Mean-center and "reflate" them, so that the empirical covariance matrices of these residual quantities match the estimated covariance matrices prior to resampling.
+
+4. Resample from the each residual quantity and generate bootstrap responses.
+
+5. Refit the model and extract the quantities of interest.
+
+6. Repeat 3-5 B times.
+
+???
+
+In our example, if we question the distributional assumption placed on the conditional residuals, 
+then a robust alternative to typical parametric inference is the residual bootstrap proposed by 
+Carpenter, Goldstein and Rasbash. The bootstrap procedure is similar to the residual bootstrap from classical regression, but there are two types of residuals: conditional residuals (sometimes called error terms) and random effects. In addition, before resampling the residual quantities, we center and reflate them. Carpenter et al. termed "reflation" as the adjustment made to the residuals to ensure the empirical covariance matrices match the estimated covariance matrices.
+
+---
+
+## Example
+
+Implementing a residual bootstrap for Galwey's initial model
+
+
+```r
+resid_boot &lt;- bootstrap(
+  fm,                 # lme4/nlme output 
+  .f = fixef,         # user-specified function
+  type = "residual",  # bootstrap algorithm
+  B = 15000           # No. resamples
+)
+```
+
+???
+
+The residual bootstrap can be implemented for our fitted model, stored in the fm object, using the bootstrap() command. bootstrap() provides a unified interface to all of the bootstrap procedures implemented in lmeresampler.
+In our example, we pass in out fitted model object, fm, followed by three key arguments. 
+
+The first argument, .f, specifies the quantities of interest that should be calculated and stored during reach bootstrap iteration. Here, we use fixef to extract the fixed effect estimates. 
+Next, we specify the type of bootstrap by setting type equal to residual. 
+Finally, we set the number of bootstrap resamples to 15K.
+
+The bootstrap results are then stored in the resid_boot object.
+
+---
+
+## Summary
+
+
+```r
+summary(resid_boot)
+```
+
+```
+## Bootstrap type: residual 
+## 
+## Number of resamples: 15000 
+## 
+##            term      observed      rep.mean           se          bias
+## 1   (Intercept)  1.085970e+00  1.085838e+00 8.864302e-03 -1.320947e-04
+## 2     Sexfemale  1.674008e-02  1.678822e-02 1.077594e-02  4.814139e-05
+## 3           Age -2.288935e-03 -2.288601e-03 2.486233e-04  3.335669e-07
+## 4      I(Age^2)  1.332438e-05  1.339372e-05 1.364009e-05  6.934124e-08
+## 5        Height  2.401063e-03  2.401483e-03 6.087766e-04  4.197800e-07
+## 6        Weight  4.039951e-03  4.043025e-03 3.681420e-04  3.074144e-06
+## 7   I(Height^2) -2.805537e-04 -2.801135e-04 3.983056e-05  4.401416e-07
+## 8   I(Weight^2) -5.735037e-05 -5.723201e-05 1.653465e-05  1.183616e-07
+## 9 Height:Weight  1.696755e-04  1.693999e-04 3.889948e-05 -2.756649e-07
+## 
+## There were 2 messages, 0 warnings, and 0 errors.
+## 
+## The most commonly occurring message was: boundary (singular) fit: see ?isSingular
+```
+
+???
+
+bootstrap returns an object of class lmeresamp, and we've provided familiar methods to explore the results. For example, the summary function allows us to quickly explore the mean, standard error, and bias of our results. It also informs us of any warnings encountered along the way, such as convergence issues. 
+
+
+
+---
+
+## Confidence intervals
+
+
+```r
+confint(resid_boot, type = "basic", level = 0.89)
+```
+
+```
+## # A tibble: 9 x 6
+##   term            estimate       lower      upper type  level
+##   &lt;chr&gt;              &lt;dbl&gt;       &lt;dbl&gt;      &lt;dbl&gt; &lt;chr&gt; &lt;dbl&gt;
+## 1 (Intercept)    1.09       1.07        1.10      basic  0.89
+## 2 Sexfemale      0.0167    -0.000418    0.0339    basic  0.89
+## 3 Age           -0.00229   -0.00269    -0.00189   basic  0.89
+## 4 I(Age^2)       0.0000133 -0.00000865  0.0000352 basic  0.89
+## 5 Height         0.00240    0.00144     0.00338   basic  0.89
+## 6 Weight         0.00404    0.00346     0.00462   basic  0.89
+## 7 I(Height^2)   -0.000281  -0.000345   -0.000218  basic  0.89
+## 8 I(Weight^2)   -0.0000574 -0.0000844  -0.0000316 basic  0.89
+## 9 Height:Weight  0.000170   0.000108    0.000233  basic  0.89
+```
+
+`type = "norm"` or `"perc"` also implemented
+
+
+???
+
+The confint function provides normal, basic, and percentile bootstrap confidences intervals for all of the parameters by default. Here, we calculate only basic bootstrap intervals by setting type equal to "basic".
+
+---
+
+## Plots
+
+Halfeye plots are produced via `ggdist` Kay (2021)
+
+
+```r
+plot(resid_boot, var = "Age")
+plot(resid_boot, var = "I(Age^2)")
+```
+
+&lt;img src="jsm2021_files/figure-html/unnamed-chunk-6-1.svg" title="Two half-eye plots, the left plot shows the boostrap distribution of the coeffecient for age, the right plots shows the bootstrap distribution for age squared." alt="Two half-eye plots, the left plot shows the boostrap distribution of the coeffecient for age, the right plots shows the bootstrap distribution for age squared."  /&gt;&lt;img src="jsm2021_files/figure-html/unnamed-chunk-6-2.svg" title="Two half-eye plots, the left plot shows the boostrap distribution of the coeffecient for age, the right plots shows the bootstrap distribution for age squared." alt="Two half-eye plots, the left plot shows the boostrap distribution of the coeffecient for age, the right plots shows the bootstrap distribution for age squared."  /&gt;
+
+
+???
+
+You can create plots of the bootstrap distributions for each quantity using the plot() command. Halfeye plots are produced using the ggdist package. A half-eye plot consists of a density plot with intervals highlighted below. The central 66% and 95% percentile intervals are displayed by default.
+
+Note that to display individual distribution plots, you can either specify the quantity of interest as a character vector or an index value.
+
+---
+
+## `lmesamp` objects
+
+
+```r
+names(resid_boot)
+```
+
+```
+##  [1] "observed"   "model"      ".f"         "replicates" "stats"     
+##  [6] "B"          "data"       "seed"       "type"       "call"      
+## [11] "message"    "warning"    "error"
+```
+
+???
+
+An lmeresamp object is just a list with the following named elements, so you may want to access specific components
+
+
+--
+
+Extract the bootstrap statistics
+
+
+```r
+resid_boot$replicates
+```
+
+```
+## # A tibble: 15,000 x 9
+##   `(Intercept)` Sexfemale      Age `I(Age^2)`  Height  Weight
+##           &lt;dbl&gt;     &lt;dbl&gt;    &lt;dbl&gt;      &lt;dbl&gt;   &lt;dbl&gt;   &lt;dbl&gt;
+## 1          1.08   0.0372  -0.00248 0.00000104 0.00191 0.00449
+## 2          1.08   0.0262  -0.00228 0.00000890 0.00253 0.00456
+## 3          1.10  -0.00518 -0.00227 0.0000266  0.00259 0.00323
+## 4          1.08   0.0168  -0.00228 0.0000346  0.00264 0.00399
+## 5          1.07   0.0279  -0.00247 0.0000367  0.00216 0.00479
+## # … with 14,995 more rows, and 3 more variables: I(Height^2) &lt;dbl&gt;,
+## #   I(Weight^2) &lt;dbl&gt;, Height:Weight &lt;dbl&gt;
+```
+
+???
+
+For example, you may need to extract the bootstrap statistics, which is easily done using the $ extractor.
+
+
+---
+
+## Speeding things up
+
+You can easily utilize parallel processing to speed up the computation via `foreach`
+
+
+```r
+library(foreach)
+library(doParallel)
+
+no_cores &lt;- 5
+cl &lt;- makeCluster(no_cores, type = "FORK")
+registerDoParallel(cores = no_cores)
+
+boot_parallel &lt;- foreach(
+  B = rep(3000, 5), 
+  .combine = combine_lmeresamp) %dopar% {
+    bootstrap(fm, .f = fixef, type = "residual", B = B)
+  }
+stopCluster(cl)
+```
+
+???
+
+Bootstrapping is a computationally demanding task, but is easily run in parallel since each iteration of the bootstrap requires no interaction with other iterations. We did not implement parallel processing within lmeresampler, rather we provide the combine_lmeresamp function so that the user can implement parallelization via the foreach package. This provides flexibility to the user, allowing them to choose the type of cluster based on their situation and hardware setup.
+
+In this example, I'm using a small fork cluster with five cores. Within the foreach call, I specify that B = 3000 replicates should be run on each of the five cores and then the combine_lmeresamp() function should be used to combine the results. I then use the dopar operator to call the bootstrap command we discussed previously.
+
+--
+
+.pull-left[
+Sequential runtime
+
+```
+##    user  system elapsed 
+## 330.085   6.893 337.668
+```
+
+]
+
+.pull-right[
+Parallel runtime
+
+```
+##    user  system elapsed 
+##   0.122   0.248 112.989
+```
+
+]
+
+
+
+???
+
+On my laptop, the runtime decreased by a factor of about 3.
+
+
+---
+
+## Unified framework
+
+In `bootstrap()`, change `type` and set additional parameters to run a different procedure
+
+
+Example: Case bootstrap example, resampling only the subjects within centers
+
+
+```r
+case_boot &lt;- bootstrap(fm, .f = fixef, type = "case", 
+                       B = 15000, resample = c(FALSE, TRUE)
+                       )
+```
+
+???
+
+So far, we've only used the residual bootstrap, but other procedures are easily implement by changing the type and passing in any additional required arguments. For example, if we wished to utilize the non-parametric cases bootstrap, we set type equal to case, and the have to add the resample argument, which specifies which levels of the model should be resampled, starting with the topmost level. Here we set resample to FALSE, TRUE, indicating that we should not resample center, but should resample subjects within centers.
+
+--
+
+|Bootstrap `\(\qquad\)`   | Type  `\(\qquad\)`       | Required arguments|
+|:---------------|:-------------------|:-----------|
+|Cases      | `"case"`       | `model, .f, type, B, resample`|
+|Residual   | `"residual"`   | `model, .f, type, B`|
+|REB        | `"reb"`        | `model, .f, type, B, reb_type`|
+|Wild       | `"wild"`       | `model, .f, type, B, hccme, aux.dist`|
+|Parametric | `"parametric"` | `model, .f, type, B`|
+
+
+???
+
+Here is a table providing the required arguments for each type of bootstrap.
+
+---
+
+## Simulation-based diagnostics
+
+Loy, Hofmann, and Cook (2017) recommends using lineups to visually diagnose LME models
+
+.pull-left[
+* Plot residuals vs. fitted values/predictor/group index
+
+* .bold[Generate decoy (null) data sets where we know the model assumptions are upheld]
+
+* Make plots of the decoy data sets
+
+* Render the lineup via faceting
+]
+
+.pull-right[
+
+
+
+
+&lt;img src="lineup.jpg" title="A lineup of residual plots rendered from Galeway's model. 19 panels display decoy residuals generated from a parametric bootstrap. The true residuals are embedded in the lineup in pael 7 and appear different from the decoys, indicating a potential model deficiency." alt="A lineup of residual plots rendered from Galeway's model. 19 panels display decoy residuals generated from a parametric bootstrap. The true residuals are embedded in the lineup in pael 7 and appear different from the decoys, indicating a potential model deficiency." width="120%" /&gt;
+
+
+]
+
+???
+
+Now that you have seen the basic of what lmeresampler can do, let's look at another example. In my 2017 paper with Heike Hofmann and Di Cook, we recommend using lineups of residual plots to diagnose linear mixed-effects models. To construct a lineup, we need to identify and create a plot of interest, simulated decoy data sets where we know the model assumptions are upheld, generate plots from these decoy data sets, and finally render the lineup through faceting.
+
+Prior to lmeresampler, this was a tedious process.
+
+---
+
+Load helper packages for lineups
+
+```r
+library(HLMdiag) # easy residual extraction
+library(nullabor) # easy lineup data wrangling
+```
+
+???
+
+Let's walk through how to construct such a lineup. I'll pull in additional diagnostic tools from the HLMdiag package, and some data wrangling functions from the nullabor package.
+
+--
+
+Generate "decoy data" via parametric bootstrap
+
+```r
+decoys &lt;- bootstrap(fm, .f = hlm_resid, type = "parametric", B = 19)
+```
+
+???
+
+The parametric bootstrap can be used to generate decoy data via the bootstrap function. Here we generate 19 decoy data sets, since we want to create a lineup with 20 facets. Notice here that we extract the hlm residuals for each bootstrap replicate.
+
+--
+
+Randomly embed real residual data into the field of decoys
+
+```r
+lineup_data &lt;- lineup(true = hlm_resid(fm), n = 19, 
+                      samples = decoys$replicates) 
+```
+
+???
+
+We combine and format the true residuals extract from fm with the decoy residuals obtained from the bootstrap using nullabor's lineup function.
+
+--
+
+Create a faceted scatterplot
+
+```r
+ggplot(data = lineup_data, aes(x = .fitted, y = .resid)) + 
+  geom_point(alpha = 0.25) +
+  labs(y = "Conditional residuals", x = "Conditional fitted values") +
+  facet_wrap(~.sample) +
+  theme_bw()
+```
+
+???
+
+Finally, we can use typical ggplot2 code to render the faceted scatterplot.
+
+---
+
+### Get the package
+
+Stable version on CRAN
+
+```r
+install.packages("lmeresampler")
+```
+
+Development version on GitHub
+
+```r
+remotes::install_github("aloy/lmeresampler")
+```
+
+???
+
+Thanks for watching my extended presentation! If you want to install lmeresampler and explore its functionality, you can obtain the stable version from CRAN or download the development version from GitHub. 
+
+--
+
+### Read about the package
+
+Documentation and examples: https://aloy.github.io/lmeresampler/
+
+Read the preprint: https://arxiv.org/a/loy_a_1.html
+
+???
+
+You can also find documentation on the lmeresampler GitHub page, and can read a preprint detailing the functionality and a few additional use cases on the arxiv.
+
+
+---
+
+#### References
+
+Carpenter, J. R., H. Goldstein, and J. Rasbash (2003). "A novel
+bootstrap procedure for assessing the relationship between class size
+and achievement". In: _Journal of the Royal Statistical Society. Series
+C, Applied statistics_ 52.4, pp. 431-443. DOI:
+[10.1111/1467-9876.00415](https://doi.org/10.1111%2F1467-9876.00415).
+
+Chambers, R. and H. Chandra (2013). "A Random Effect Block Bootstrap
+for Clustered Data". In: _Journal of computational and graphical
+statistics_ 22.2, pp. 452-470. DOI:
+[10.1080/10618600.2012.681216](https://doi.org/10.1080%2F10618600.2012.681216).
+
+Field, C. A., Z. Pang, and A. H. Welsh (2010). "Bootstrapping Robust
+Estimates for Clustered Data". In: _Journal of the American Statistical
+Association_ 105.492, pp. 1606-1616. DOI:
+[10.1198/jasa.2010.tm09541](https://doi.org/10.1198%2Fjasa.2010.tm09541).
+
+Galwey, N. W. (2014). _Introduction to mixed modelling: beyond
+regression and analysis of variance_. John Wiley &amp; Sons.
+
+Kay, M. (2021). _ggdist: Visualizations of Distributions and
+Uncertainty_. R package version 2.4.1. DOI:
+[10.5281/zenodo.3879620](https://doi.org/10.5281%2Fzenodo.3879620).
+URL:
+[https://mjskay.github.io/ggdist/](https://mjskay.github.io/ggdist/).
+
+---
+
+#### References
+
+Leeden, R. van der, E. Meijer, and F. M. T. A. Busing (2008).
+"Resampling Multilevel Models". In: _Handbook of Multilevel Analysis_.
+Ed. by J. de Leeuw and E. Meijer. Springer New York, pp. 401-433. DOI:
+[10.1007/978-0-387-73186-5\_11](https://doi.org/10.1007%2F978-0-387-73186-5%5C_11).
+
+Loy, A., H. Hofmann, and D. Cook (2017). "Model Choice and Diagnostics
+for Linear Mixed-Effects Models Using Statistics on Street Corners".
+In: _Journal of Computational and Graphical Statistics_ 26.3, pp.
+478-492. URL:
+[http://dx.doi.org/10.1080/10618600.2017.1330207](http://dx.doi.org/10.1080/10618600.2017.1330207).
+    </textarea>
+<style data-target="print-only">@media screen {.remark-slide-container{display:block;}.remark-slide-scaler{box-shadow:none;}}</style>
+<script src="https://remarkjs.com/downloads/remark-latest.min.js"></script>
+<script>var slideshow = remark.create({
+"highlightStyle": "github",
+"highlightLines": true
+});
+if (window.HTMLWidgets) slideshow.on('afterShowSlide', function (slide) {
+  window.dispatchEvent(new Event('resize'));
+});
+(function(d) {
+  var s = d.createElement("style"), r = d.querySelector(".remark-slide-scaler");
+  if (!r) return;
+  s.type = "text/css"; s.innerHTML = "@page {size: " + r.style.width + " " + r.style.height +"; }";
+  d.head.appendChild(s);
+})(document);
+
+(function(d) {
+  var el = d.getElementsByClassName("remark-slides-area");
+  if (!el) return;
+  var slide, slides = slideshow.getSlides(), els = el[0].children;
+  for (var i = 1; i < slides.length; i++) {
+    slide = slides[i];
+    if (slide.properties.continued === "true" || slide.properties.count === "false") {
+      els[i - 1].className += ' has-continuation';
+    }
+  }
+  var s = d.createElement("style");
+  s.type = "text/css"; s.innerHTML = "@media print { .has-continuation { display: none; } }";
+  d.head.appendChild(s);
+})(document);
+// delete the temporary CSS (for displaying all slides initially) when the user
+// starts to view slides
+(function() {
+  var deleted = false;
+  slideshow.on('beforeShowSlide', function(slide) {
+    if (deleted) return;
+    var sheets = document.styleSheets, node;
+    for (var i = 0; i < sheets.length; i++) {
+      node = sheets[i].ownerNode;
+      if (node.dataset["target"] !== "print-only") continue;
+      node.parentNode.removeChild(node);
+    }
+    deleted = true;
+  });
+})();
+(function() {
+  "use strict"
+  // Replace <script> tags in slides area to make them executable
+  var scripts = document.querySelectorAll(
+    '.remark-slides-area .remark-slide-container script'
+  );
+  if (!scripts.length) return;
+  for (var i = 0; i < scripts.length; i++) {
+    var s = document.createElement('script');
+    var code = document.createTextNode(scripts[i].textContent);
+    s.appendChild(code);
+    var scriptAttrs = scripts[i].attributes;
+    for (var j = 0; j < scriptAttrs.length; j++) {
+      s.setAttribute(scriptAttrs[j].name, scriptAttrs[j].value);
+    }
+    scripts[i].parentElement.replaceChild(s, scripts[i]);
+  }
+})();
+(function() {
+  var links = document.getElementsByTagName('a');
+  for (var i = 0; i < links.length; i++) {
+    if (/^(https?:)?\/\//.test(links[i].getAttribute('href'))) {
+      links[i].target = '_blank';
+    }
+  }
+})();
+// adds .remark-code-has-line-highlighted class to <pre> parent elements
+// of code chunks containing highlighted lines with class .remark-code-line-highlighted
+(function(d) {
+  const hlines = d.querySelectorAll('.remark-code-line-highlighted');
+  const preParents = [];
+  const findPreParent = function(line, p = 0) {
+    if (p > 1) return null; // traverse up no further than grandparent
+    const el = line.parentElement;
+    return el.tagName === "PRE" ? el : findPreParent(el, ++p);
+  };
+
+  for (let line of hlines) {
+    let pre = findPreParent(line);
+    if (pre && !preParents.includes(pre)) preParents.push(pre);
+  }
+  preParents.forEach(p => p.classList.add("remark-code-has-line-highlighted"));
+})(document);</script>
+
+<script>
+slideshow._releaseMath = function(el) {
+  var i, text, code, codes = el.getElementsByTagName('code');
+  for (i = 0; i < codes.length;) {
+    code = codes[i];
+    if (code.parentNode.tagName !== 'PRE' && code.childElementCount === 0) {
+      text = code.textContent;
+      if (/^\\\((.|\s)+\\\)$/.test(text) || /^\\\[(.|\s)+\\\]$/.test(text) ||
+          /^\$\$(.|\s)+\$\$$/.test(text) ||
+          /^\\begin\{([^}]+)\}(.|\s)+\\end\{[^}]+\}$/.test(text)) {
+        code.outerHTML = code.innerHTML;  // remove <code></code>
+        continue;
+      }
+    }
+    i++;
+  }
+};
+slideshow._releaseMath(document);
+</script>
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+(function () {
+  var script = document.createElement('script');
+  script.type = 'text/javascript';
+  script.src  = 'https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-MML-AM_CHTML';
+  if (location.protocol !== 'file:' && /^https?:/.test(script.src))
+    script.src  = script.src.replace(/^https?:/, '');
+  document.getElementsByTagName('head')[0].appendChild(script);
+})();
+</script>
+  </body>
+</html>

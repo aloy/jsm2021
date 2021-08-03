@@ -1,0 +1,17 @@
+base
+RefManageR
+readr
+ggplot2
+dplyr
+tidyr
+forcats
+Matrix
+lme4
+HLMdiag
+qqplotr
+cowplot
+lmeresampler
+foreach
+iterators
+doParallel
+nullabor

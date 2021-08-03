@@ -1,0 +1,281 @@
+---
+title: "Bootstrapping Multilevel Models in R Using `lmeresampler`"
+author: "Adam Loy, Carleton College"
+date: "[aloy.rbind.io/slides/jsm2021](https://aloy.rbind.io/slides/jsm2021)"
+header-includes: 
+output:
+  xaringan::moon_reader:
+    css: [jsm.css, useR-fonts]
+    lib_dir: libs
+    nature:
+      highlightStyle: github
+      highlightLines: true
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, dev = 'svg')
+
+# Loading bib
+library(RefManageR)
+BibOptions(check.entries = FALSE,
+           bib.style = "authoryear",
+           cite.style = "authoryear",
+           style = "markdown",
+           hyperlink = FALSE,
+           dashed = FALSE)
+myBib <- ReadBib("./lmeresampler_jsm.bib", check = FALSE)
+
+
+# Packages
+library(readr)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(forcats)
+library(lme4)
+library(HLMdiag)
+library(qqplotr)
+library(cowplot)
+library(lmeresampler)
+
+# Example data set, dropping NAs
+osteo <- read_delim("ost phenotypes.dat", delim = "\t") %>%
+  select(-contains("X")) %>%
+  rename(BMD = `CalL2-L4BMD`) %>%
+  mutate(Sex = as_factor(Gender) %>% fct_recode(male = "1", female = "2"), 
+         CentreNumber = factor(CentreNumber)) %>%
+  filter(Proband == "No") %>%
+  drop_na(BMD, Sex, Age, Height, Weight, CentreNumber)
+
+# Plot theming
+theme_useR <- function(base_size = 28) {
+  theme_bw(base_size = base_size) + 
+    theme(legend.margin = margin(), legend.title = element_blank())
+}
+
+```
+
+## `lmeresampler`
+
+Makes a wider set of bootstrap algorithms available to `nlme` and `lme4` users
+
+  + parametric*
+  
+  + residual (semi-parametric)*
+  
+  + cases (non-parametric)*
+  
+  + random-effects block
+  
+  + wild
+
+<br>
+
+<br>
+
+
+.footnote[
+`*` = Also works with model fit via `lme4::glmer()`
+]
+
+---
+
+## Example data
+
+
+```{r message=FALSE}
+library(lmeresampler)
+jsp728 %>% print(width = 70)
+```
+
+???
+
+As a first example, let's consider the junior school project data set provided by lmeresampler, which is discussed in Goldstein's textbook on multilevel modeling. The data set is comprised of measurements taken on 728 elementary school students across 48 schools in London.
+
+
+---
+
+## Fitting a random intercept model
+
+```{r message=FALSE}
+library(lme4)
+jsp_mod <- lmer(
+  mathAge11 ~ mathAge8 + gender + class + (1 | school), 
+  data = jsp728
+)
+```
+
+
+???
+
+Suppose we wish to fit a random intercept model explored by Goldstein where the math score at age 8, gender, and the father's social class were used to describe math scores at age 11. Here, we fit this model using `lmer()` and store the results in the jsp_mod object.
+
+---
+
+## `bootstrap()`
+
+`lmeresampler` provides a unified `bootstrap()` function
+
+Running a residual bootstrap on our model:
+
+```{r eval=FALSE}
+resid_boot <- bootstrap(
+  jsp_mod,            # lme4/nlme output 
+  .f = fixef,         # user-specified function
+  type = "residual",  # bootstrap algorithm
+  B = 10000           # No. resamples
+)
+```
+
+---
+
+## `bootstrap()`
+
+`lmeresampler` provides a unified `bootstrap()` function
+
+Running a residual bootstrap on our model:
+
+
+```{r include=FALSE, cache=TRUE}
+library(lme4)
+library(lmeresampler)
+library(ggplot2)
+
+# Bootstrap
+stime <- system.time({resid_boot <- bootstrap(
+  jsp_mod,              # lme4/nlme output 
+  .f = fixef,           # user-specified function
+  type = "parametric",  # bootstrap algorithm
+  B = 10000             # No. resamples
+)
+})
+```
+
+
+```{r eval=FALSE}
+resid_boot <- bootstrap(
+* jsp_mod,            # lme4/nlme output 
+  .f = fixef,         # user-specified function
+  type = "residual",  # bootstrap algorithm
+  B = 10000           # No. resamples
+)
+```
+
+---
+
+## `bootstrap()`
+
+`lmeresampler` provides a unified `bootstrap()` function
+
+Running a residual bootstrap on our model:
+
+
+
+```{r eval=FALSE}
+resid_boot <- bootstrap(
+  jsp_mod,            # lme4/nlme output 
+* .f = fixef,         # user-specified function
+  type = "residual",  # bootstrap algorithm
+  B = 10000           # No. resamples
+)
+```
+
+---
+
+## `bootstrap()`
+
+`lmeresampler` provides a unified `bootstrap()` function
+
+Running a residual bootstrap on our model:
+
+
+```{r eval=FALSE}
+resid_boot <- bootstrap(
+  jsp_mod,            # lme4/nlme output 
+  .f = fixef,         # user-specified function
+* type = "residual",  # bootstrap algorithm
+  B = 10000           # No. resamples
+)
+```
+
+---
+
+## `bootstrap()`
+
+`lmeresampler` provides a unified `bootstrap()` function
+
+Running a residual bootstrap on our model:
+
+
+```{r eval=FALSE}
+resid_boot <- bootstrap(
+  jsp_mod,            # lme4/nlme output 
+  .f = fixef,         # user-specified function
+  type = "residual",  # bootstrap algorithm
+* B = 10000           # No. resamples
+)
+```
+
+???
+
+The `bootstrap()` command provides a unified interface to all of the bootstrap procedures. For example, we can easily run a residual bootstrap for our fitted model using the bootstrap command, specifying the function that calculates the quantities of interest, the type of bootstrap, and the number of bootstrap replicates. Here, we're interested in extracting the fixed effects via fixef() and we ran 10000 bootstrap replicates.
+
+---
+
+### `summary()`
+
+```{r error=FALSE}
+summary(resid_boot)
+```
+
+???
+
+bootstrap returns an object of class lmeresamp, and we've provided familiar methods to explore the results. For example, the summary function allows us to quickly explore the mean, standard error, and bias of our results. It also informs us of any warnings encountered along the way, such as convergence issues. 
+
+---
+
+### `confint()`
+
+```{r}
+confint(resid_boot, type = "basic")
+```
+
+???
+The confint function provides normal, basic, and percentile bootstrap confidences intervals for all of the parameters by default. In this code chunk, we calculate only basic bootstrap intervals by setting type to "basic".
+
+---
+
+### `plot()`
+
+```{r fig.show='hold', fig.height = 3.5, fig.width = 3.5}
+plot(resid_boot, var = "mathAge8")
+plot(resid_boot, var = 1)
+```
+
+---
+
+### Get the package
+
+Stable version on CRAN
+```{r eval=FALSE}
+install.packages("lmeresampler")
+```
+
+Development version on GitHub
+```{r eval=FALSE}
+remotes::install_github("aloy/lmeresampler")
+```
+
+
+--
+
+### Learn more
+
+Check out my 15-minute talk!
+
+Documentation and examples: https://aloy.github.io/lmeresampler/
+
+Read the preprint: https://arxiv.org/a/loy_a_1.html
+
+
