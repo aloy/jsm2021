@@ -1,7 +1,7 @@
 ---
 title: "Bootstrapping Multilevel Models in R Using `lmeresampler`"
 author: "Adam Loy, Carleton College"
-date: "[aloy.rbind.io/slides/jsm2021](https://aloy.rbind.io/slides/jsm2021)"
+date: "[aloy.github.io/jsm2021/jsm2021](https://aloy.github.io/jsm2021/jsm2021)"
 header-includes: 
 output:
   xaringan::moon_reader:
@@ -147,18 +147,19 @@ dp3 <- ggplot(data = fm_resids, aes(sample = .resid)) +
 plot_grid(dp1, dp2, dp3, nrow = 1)
 ```
 
-* Analysis of the conditional residuals reveal violation of condition that $\varepsilon \sim \mathcal{N}(\mathbf{0}, \sigma^2 \mathbf{I})$
+* Analysis of the conditional residuals reveals a violation of $\varepsilon \sim \mathcal{N}(\mathbf{0}, \sigma^2 \mathbf{I})$
 
 * `r Citet(myBib, "galwey2014")` deletes 63 outliers identified from more extensive scans
 
 ???
 
-After fitting the initial model, Galwey conducted a brief residual analysis, noting the 
-apparent non-linearity of the conditional residuals or error terms.
+After fitting the initial model, Galwey conducted a brief residual analysis and noted the 
+apparent non-normality of the conditional residuals. The skew of the residual distribution can be seed in both the histogram and the normal Q-Q plot.
 
-To address this issue, Galwey deletes 63 outliers that were identified by more extensive scanning methods; 
-however there is another option. While the model seems suspect either due to a distributional violation or
-contamination with outliers, more robust analysis is still possible using methods such as the bootstrap.
+To address this issue, Galwey deleted 63 outliers that were identified by more extensive scanning methods; however there is another option.
+
+While the model seems suspect due to a distributional violation or
+contamination with outliers, more robust analysis is possible using methods such as the bootstrap.
 
 Throughout this talk I'll guide you through how to implement bootstrap procedures for linear mixed-effects 
 models in R, and also point to some additional applications.
@@ -184,9 +185,9 @@ NoCite(myBib, "Van_der_Leeden2008")
 
 ???
 
-In 2008, Van der Leeden and coauthors pointed out that many bootstrap procedures were unavailable in R, so users needed to program their own bootstraps if they wanted something other than the parametric bootstrap. 
+In 2008, Van der Leeden and coauthors pointed out that many bootstrap procedures were unavailable in R, so users needed to program their own bootstraps if they wanted something other than the parametric. 
 
-In 2009, an R package was presented at useR! outlining a comprehensive framework for bootstrapping multilevel models; unfortunately, the package never made it's way to CRAN and the project appears to have been abandoned. 
+In 2009, an R package was presented at useR! outlining a comprehensive framework for bootstrapping multilevel models. Unfortunately, the package never made it's way to CRAN and the project appears to have been abandoned. 
 
 Since that time, there have been a few additions to `lme4` in terms of bootstrapping capabilities, but numerous procedures are still missing. lmeresampler implements many of the missing procedures and is under active maintenance and development.
 
@@ -217,12 +218,12 @@ Implements a wider set of bootstrap algorithms available to `nlme` and `lme4` us
 
 ???
 
-lmeresampler provides users with easy access to a larger set of bootstrap procedures. 
+lmeresampler provides users with easy access to a larger set of bootstrap procedures for models fit using lme in the nlme package or lmer in the lme4 package. 
+
 Currently, it implements five procedures for Gaussian response models, including the parametric, 
 residual, cases, random-effects block, and wild bootstraps. 
 
-The parametric, residual, and cases bootstraps are also available for generalized linear mixed-effects 
-models fit via `glmer`.
+The parametric, residual, and cases bootstraps are also available for generalized linear mixed-effects  models fit via `glmer`.
   
 
 ---
@@ -245,9 +246,11 @@ models fit via `glmer`.
 
 ???
 
-In our example, if we question the distributional assumption placed on the conditional residuals, 
-then a robust alternative to typical parametric inference is the residual bootstrap proposed by 
-Carpenter, Goldstein and Rasbash. The bootstrap procedure is similar to the residual bootstrap from classical regression, but there are two types of residuals: conditional residuals (sometimes called error terms) and random effects. In addition, before resampling the residual quantities, we center and reflate them. Carpenter et al. termed "reflation" as the adjustment made to the residuals to ensure the empirical covariance matrices match the estimated covariance matrices.
+In our example, if we question the distributional assumption placed on the conditional residuals, then a robust alternative to typical parametric inference is the residual bootstrap proposed by Carpenter, Goldstein and Rasbash. 
+
+The bootstrap procedure is similar to the residual bootstrap from classical regression, but there are two types of residuals: conditional residuals (sometimes called error terms) and random effects. 
+
+In addition, before resampling the residual quantities, we center and reflate them. Carpenter et al. termed "reflation" as the adjustment made to the residuals to ensure the empirical covariance matrices match the estimated covariance matrices.
 
 ---
 
@@ -267,13 +270,84 @@ resid_boot <- bootstrap(
 ???
 
 The residual bootstrap can be implemented for our fitted model, stored in the fm object, using the bootstrap() command. bootstrap() provides a unified interface to all of the bootstrap procedures implemented in lmeresampler.
-In our example, we pass in out fitted model object, fm, followed by three key arguments. 
 
-The first argument, .f, specifies the quantities of interest that should be calculated and stored during reach bootstrap iteration. Here, we use fixef to extract the fixed effect estimates. 
-Next, we specify the type of bootstrap by setting type equal to residual. 
-Finally, we set the number of bootstrap resamples to 15K.
+---
 
-The bootstrap results are then stored in the resid_boot object.
+
+## Example
+
+Implementing a residual bootstrap for Galwey's initial model
+
+```{r eval=FALSE}
+resid_boot <- bootstrap(
+* fm,                 # lme4/nlme output 
+  .f = fixef,         # user-specified function
+  type = "residual",  # bootstrap algorithm
+  B = 15000           # No. resamples
+)
+```
+
+???
+
+The first argument to bootstrap is our fitted model, which is stored in `fm` in this example.
+
+---
+
+## Example
+
+Implementing a residual bootstrap for Galwey's initial model
+
+```{r eval=FALSE}
+resid_boot <- bootstrap(
+  fm,                 # lme4/nlme output 
+* .f = fixef,         # user-specified function
+  type = "residual",  # bootstrap algorithm
+  B = 15000           # No. resamples
+)
+```
+
+???
+
+Next, we specify `.f`, a function calculating the quantities of interest from each bootstrap iteration. In this example, we're calculating the fixed effects, but any function calculating or extracting quantities from the fitted model works.
+
+---
+
+## Example
+
+Implementing a residual bootstrap for Galwey's initial model
+
+```{r eval=FALSE}
+resid_boot <- bootstrap(
+  fm,                 # lme4/nlme output 
+  .f = fixef,         # user-specified function
+* type = "residual",  # bootstrap algorithm
+  B = 15000           # No. resamples
+)
+```
+
+???
+
+To specify the bootstrap procedure, set the type argument. Here we set type equal to residual.
+
+
+---
+
+## Example
+
+Implementing a residual bootstrap for Galwey's initial model
+
+```{r eval=FALSE}
+resid_boot <- bootstrap(
+  fm,                 # lme4/nlme output 
+  .f = fixef,         # user-specified function
+  type = "residual",  # bootstrap algorithm
+* B = 15000           # No. resamples
+)
+```
+
+???
+
+Finally,  set the number of bootstrap iterations, B. In this example, we set B equal to 15K, which is in line with Tim Hesterberg's suggestions.
 
 ---
 
@@ -285,7 +359,7 @@ summary(resid_boot)
 
 ???
 
-bootstrap returns an object of class lmeresamp, and we've provided familiar methods to explore the results. For example, the summary function allows us to quickly explore the mean, standard error, and bias of our results. It also informs us of any warnings encountered along the way, such as convergence issues. 
+bootstrap returns an object of class lmeresamp, and we've provided familiar methods to explore the results. For example, the summary function allows us to quickly explore the mean, standard error, and bias of our results. It also informs us of any warnings encountered along the way, such as boundary or convergence issues. 
 
 
 
@@ -302,7 +376,9 @@ confint(resid_boot, type = "basic", level = 0.89)
 
 ???
 
-The confint function provides normal, basic, and percentile bootstrap confidences intervals for all of the parameters by default. Here, we calculate only basic bootstrap intervals by setting type equal to "basic".
+The confint function provides normal, basic, and percentile bootstrap confidence intervals for all terms by default. 
+
+In this example, we calculate only basic bootstrap intervals by setting type equal to "basic". 
 
 ---
 
@@ -310,26 +386,29 @@ The confint function provides normal, basic, and percentile bootstrap confidence
 
 Halfeye plots are produced via `ggdist` `r Citet(myBib, "ggdist")`
 
-```{r eval=FALSE}
-plot(resid_boot, var = "Age")
-plot(resid_boot, var = "I(Age^2)")
-```
 
-```{r echo=FALSE, fig.height = 3, fig.width = 3, fig.show='hold', fig.alt = "Two half-eye plots, the left plot shows the boostrap distribution of the coeffecient for age, the right plots shows the bootstrap distribution for age squared."}
-plot(resid_boot, var = "Age") + ylab("density")
-plot(resid_boot, var = "I(Age^2)") + ylab("density")
+```{r echo=TRUE, fig.height = 3, fig.width = 3, fig.show='hold', fig.alt = "Two half-eye plots, the left plot shows the boostrap distribution of the coeffecient for age, the right plots shows the bootstrap distribution for age squared."}
+plot(resid_boot, var = "Age")
+plot(resid_boot, var = 4)
 ```
 
 
 ???
 
-You can create plots of the bootstrap distributions for each quantity using the plot() command. Halfeye plots are produced using the ggdist package. A half-eye plot consists of a density plot with intervals highlighted below. The central 66% and 95% percentile intervals are displayed by default.
+You can create plots of the bootstrap distributions for each quantity using the plot() command. Here, we have half-eye plots displaying the bootstrap distributions for the age and age^2 terms.
 
-Note that to display individual distribution plots, you can either specify the quantity of interest as a character vector or an index value.
+Halfeye plots are produced using the ggdist package. A half-eye plot consists of a density plot with central intervals highlighted below. The central 66% and 95% percentile intervals are displayed by default.
+
+If the var argument is not specified, distributions of all the terms are rendered, which can be difficult to read if they are on different scales. 
+
+To specify a single term, you can set var equal to the name of the term, as seen here when plotting age. 
+
+Alternatively, you can use a numeric index to specify var, as seen here where we set var equal to 4 to plot the distribution for age^2.
+
 
 ---
 
-## `lmesamp` objects
+## `lmeresamp` objects
 
 ```{r}
 names(resid_boot)
@@ -337,7 +416,7 @@ names(resid_boot)
 
 ???
 
-An lmeresamp object is just a list with the following named elements, so you may want to access specific components
+An lmeresamp object is just a named list, so it's easy to access specific components. 
 
 
 --
@@ -353,7 +432,8 @@ print(resid_boot$replicates, n = 5, width = 70)
 
 ???
 
-For example, you may need to extract the bootstrap statistics, which is easily done using the $ extractor.
+You will most commonly want to access the replicates element, which store the bootstrap statistics or replicates. If you see errors, warnings, or messages, then you might want to look into these elements, which provide lists of the raw messages. This will help you decide whether you need to exclude any replicates.
+
 
 
 ---
@@ -382,7 +462,82 @@ stopCluster(cl)
 
 Bootstrapping is a computationally demanding task, but is easily run in parallel since each iteration of the bootstrap requires no interaction with other iterations. We did not implement parallel processing within lmeresampler, rather we provide the combine_lmeresamp function so that the user can implement parallelization via the foreach package. This provides flexibility to the user, allowing them to choose the type of cluster based on their situation and hardware setup.
 
-In this example, I'm using a small fork cluster with five cores. Within the foreach call, I specify that B = 3000 replicates should be run on each of the five cores and then the combine_lmeresamp() function should be used to combine the results. I then use the dopar operator to call the bootstrap command we discussed previously.
+---
+
+## Speeding things up
+
+You can easily utilize parallel processing to speed up the computation via `foreach`
+
+```{r eval=FALSE}
+library(foreach)
+library(doParallel)
+
+no_cores <- 5 #<<
+cl <- makeCluster(no_cores, type = "FORK") #<<
+registerDoParallel(cores = no_cores) #<<
+
+boot_parallel <- foreach(
+  B = rep(3000, 5), 
+  .combine = combine_lmeresamp) %dopar% {
+    bootstrap(fm, .f = fixef, type = "residual", B = B)
+  }
+stopCluster(cl)
+```
+
+???
+In this example, I'm using a small fork cluster with five cores. 
+
+---
+
+## Speeding things up
+
+You can easily utilize parallel processing to speed up the computation via `foreach`
+
+```{r eval=FALSE}
+library(foreach)
+library(doParallel)
+
+no_cores <- 5
+cl <- makeCluster(no_cores, type = "FORK") 
+registerDoParallel(cores = no_cores) 
+
+boot_parallel <- foreach(
+  B = rep(3000, 5), #<<
+  .combine = combine_lmeresamp) %dopar% {
+    bootstrap(fm, .f = fixef, type = "residual", B = B)
+  }
+stopCluster(cl)
+```
+
+???
+Within the foreach call, I specify that B = 3000 replicates should be run on each of the five cores.
+
+
+---
+
+## Speeding things up
+
+You can easily utilize parallel processing to speed up the computation via `foreach`
+
+```{r eval=FALSE}
+library(foreach)
+library(doParallel)
+
+no_cores <- 5
+cl <- makeCluster(no_cores, type = "FORK") 
+registerDoParallel(cores = no_cores) 
+
+boot_parallel <- foreach(
+  B = rep(3000, 5), 
+  .combine = combine_lmeresamp) %dopar% { #<<
+    bootstrap(fm, .f = fixef, type = "residual", B = B) #<<
+  } #<<
+stopCluster(cl)
+```
+
+???
+
+Then, the combine_lmeresamp() function should be used to combine the results. I then use the dopar operator to call the bootstrap command we discussed previously.
 
 --
 
@@ -406,7 +561,7 @@ ptime
 
 ???
 
-On my laptop, the runtime decreased by a factor of about `r round(stime[3] / ptime[3], 1)`.
+On my laptop, the runtime decreased by a factor of about `r round(stime[3] / ptime[3], 1)`. 
 
 
 ---
@@ -426,7 +581,9 @@ case_boot <- bootstrap(fm, .f = fixef, type = "case",
 
 ???
 
-So far, we've only used the residual bootstrap, but other procedures are easily implement by changing the type and passing in any additional required arguments. For example, if we wished to utilize the non-parametric cases bootstrap, we set type equal to case, and the have to add the resample argument, which specifies which levels of the model should be resampled, starting with the topmost level. Here we set resample to FALSE, TRUE, indicating that we should not resample center, but should resample subjects within centers.
+So far, we've only used the residual bootstrap, but other procedures are easily implemented by changing the type and passing in any required arguments. 
+
+For example, if we wished to utilize the non-parametric cases bootstrap, we set type equal to case, and need to specify a resample argument. The resample argument requires a logical vector specifying which levels of the model should be resampled, starting with the topmost level. Here we set resample to FALSE, TRUE, indicating that we should not resample the groups, but should resample subjects within groups.
 
 --
 
@@ -441,7 +598,7 @@ So far, we've only used the residual bootstrap, but other procedures are easily 
 
 ???
 
-Here is a table providing the required arguments for each type of bootstrap.
+Here is a table providing the required arguments for each type of bootstrap. More details can be found in the help file.
 
 ---
 
@@ -489,9 +646,13 @@ knitr::include_graphics("lineup.jpg")
 
 ???
 
-Now that you have seen the basic of what lmeresampler can do, let's look at another example. In my 2017 paper with Heike Hofmann and Di Cook, we recommend using lineups of residual plots to diagnose linear mixed-effects models. To construct a lineup, we need to identify and create a plot of interest, simulated decoy data sets where we know the model assumptions are upheld, generate plots from these decoy data sets, and finally render the lineup through faceting.
+Now that you have seen the basic of what lmeresampler can do, let's look at another example. In my 2017 paper with Heike Hofmann and Di Cook, we recommend using lineups of residual plots to diagnose linear mixed-effects models. 
 
-Prior to lmeresampler, this was a tedious process.
+To construct a lineup, we need to identify and create a diagnostic plot of interest, simulate decoy data sets where we know the model assumptions are upheld, generate plots from these decoy data sets, and finally render the lineup through faceting.
+
+An example lineup is displayed for Galwey's original model here. 19 panels display decoy residuals generated from a parametric bootstrap. The true residuals are embedded in the lineup in panel 7 and appear different from the decoys, indicating a potential model deficiency.
+
+Prior to lmeresampler, creating this type of lineup was a bit tedious.
 
 ---
 
@@ -503,32 +664,35 @@ library(nullabor) # easy lineup data wrangling
 
 ???
 
-Let's walk through how to construct such a lineup. I'll pull in additional diagnostic tools from the HLMdiag package, and some data wrangling functions from the nullabor package.
+Let's walk through how to construct such a lineup. I'll pull in additional diagnostic tools from the HLMdiag package, and a data wrangling function from the nullabor package.
 
 --
 
 Generate "decoy data" via parametric bootstrap
-```{r eval=FALSE}
+```{r true=FALSE, cache=TRUE}
 decoys <- bootstrap(fm, .f = hlm_resid, type = "parametric", B = 19)
 ```
 
 ???
 
-The parametric bootstrap can be used to generate decoy data via the bootstrap function. Here we generate 19 decoy data sets, since we want to create a lineup with 20 facets. Notice here that we extract the hlm residuals for each bootstrap replicate.
+The parametric bootstrap can be used to generate decoy data via the bootstrap function. Here we generate 19 decoy data sets, since we want to create a lineup with 20 facets. Notice that we extract the hlm residuals for each bootstrap replicate.
 
 --
 
 Randomly embed real residual data into the field of decoys
-```{r eval=FALSE}
+```{r true=FALSE, cache=TRUE}
 lineup_data <- lineup(true = hlm_resid(fm), n = 19, 
                       samples = decoys$replicates) 
 ```
 
 ???
 
-We combine and format the true residuals extract from fm with the decoy residuals obtained from the bootstrap using nullabor's lineup function.
+Next, we combine and format the true residuals extract from fm with the decoy residuals obtained from the bootstrap using nullabor's lineup function. The observed residuals from our fitted model are passed to the true argument, and the residuals from the bootstrapped models are passed to the samples argument. Notice that these residuals are stored in the replicates element of the decoys object.
 
---
+The lineup function prints a coded message with the location of the true panel, so you don't have to guess if it's hard to discern. To decode this message, simply copy and paste this decrypt command into your console.
+
+
+---
 
 Create a faceted scatterplot
 ```{r eval=FALSE}
@@ -539,9 +703,15 @@ ggplot(data = lineup_data, aes(x = .fitted, y = .resid)) +
   theme_bw()
 ```
 
+```{r, out.width="75%", echo=FALSE, fig.alt = "A lineup of residual plots rendered from Galeway's model. 19 panels display decoy residuals generated from a parametric bootstrap. The true residuals are embedded in the lineup in pael 7 and appear different from the decoys, indicating a potential model deficiency.", fig.align='center'}
+knitr::include_graphics("lineup.jpg")
+```
+
 ???
 
 Finally, we can use typical ggplot2 code to render the faceted scatterplot.
+
+As we saw before, the residuals from the fitted model stand out, making us question the model's adequacy.
 
 ---
 
